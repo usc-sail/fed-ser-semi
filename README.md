@@ -32,11 +32,10 @@ Let's recap the basic of the FL.
 One major challenge in FL is that high-quality labeled data samples do not often exist, and most data samples are indeed unlabeled. To address this, Semi-FedSER performs the model training, utilizing both labeled and unlabeled data samples at the local client. 
 
 Semi-FedSER also incoporate with pseudo-labeling using the idea of multiview pseudo-labeling, and we adopt an efficient yet effective data augmentation technique called: Stochastic Feature Augmentation (SFA). The algorithm of the pseudo-labeling process is below.
-![Alt text](img/pseudo_labeling.png?raw=true "pseudo-labeling")
+<p align="center"><img src="img/pseudo_labeling.png" width="450"></p>
 
 In order to further address the gradient drifting issue in non-IID setting of FL, we add the implementation of SCAFFOLD. The final training algorithm is below.
-![Alt text](img/semi_fedser.png?raw=true "semi-fedser")
-
+<p align="center"><img src="img/semi_fedser.png" width="450"></p>
 
 ## Final SER performance
 ![Alt text](img/ser_results.png?raw=true "semi-fedser")
