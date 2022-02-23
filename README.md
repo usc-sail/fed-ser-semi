@@ -15,7 +15,7 @@ Publication Date | Model | Name | Paper | Input | Stride | Pre-train Data | Offi
 12 Jul 2020 | TERA | tera | [arxiv](https://arxiv.org/abs/2007.06028) | Mel | 10ms | [LibriSpeech-960](http://www.openslr.org/12) | [S3PRL](https://github.com/andi611/Self-Supervised-Speech-Pretraining-and-Representation-Learning)
 Dec 11 2020 | DeCoAR 2.0 | decoar2 | [arxiv](https://arxiv.org/abs/2012.06659) | Mel | 10ms | [LibriSpeech-960](http://www.openslr.org/12) | [speech-representations](https://github.com/awslabs/speech-representations)
 
-## Federated Learning - SER results
+## Federated Learning Overview
 
 Let's recap the basic of the FL. 
 
@@ -25,8 +25,22 @@ Let's recap the basic of the FL.
 
 3. Finally, the server aggregates the model updates to obtain the global model for the next training round. 
 
-
 ![Alt text](img/fl_global.png?raw=true "Federated Learning")
+
+## Challenge in FL
+
+One major challenge in FL is that high-quality labeled data samples do not often exist, and most data samples are indeed unlabeled. To address this, Semi-FedSER performs the model training, utilizing both labeled and unlabeled data samples at the local client. 
+
+Semi-FedSER also incoporate with pseudo-labeling using the idea of multiview pseudo-labeling, and we adopt an efficient yet effective data augmentation technique called: Stochastic Feature Augmentation (SFA). The algorithm of the pseudo-labeling process is below.
+![Alt text](img/pseudo_labeling.png?raw=true "pseudo-labeling")
+
+In order to further address the gradient drifting issue in non-IID setting of FL, we add the implementation of SCAFFOLD. The final training algorithm is below.
+![Alt text](img/semi_fedser.png?raw=true "semi-fedser")
+
+
+## Final SER performance
+![Alt text](img/ser_results.png?raw=true "semi-fedser")
+
 
 ## Other Referecences
 
