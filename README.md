@@ -1,5 +1,5 @@
 # Semi-FedSER: Semi-supervised Learning for Speech Emotion Recognition OnFederated Learning using Multiview Pseudo-Labeling
-This repository contains the official implementation (in [PyTorch](https://pytorch.org/)) of Semi-FedSER.
+This repository contains the official implementation (in [PyTorch](https://pytorch.org/)) of [Semi-FedSER](https://github.com/usc-sail/fed-ser-semi/blob/main/paper.pdf).
 
 
 ## Speech Features
