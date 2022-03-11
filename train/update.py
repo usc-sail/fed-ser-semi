@@ -6,6 +6,7 @@ import copy, pdb, time, warnings, torch
 import numpy as np
 from sklearn.metrics import accuracy_score, recall_score
 from sklearn.metrics import confusion_matrix
+import collections
 warnings.filterwarnings('ignore') 
 
 
@@ -78,6 +79,7 @@ class local_trainer(object):
                 model.zero_grad()
                 optimizer.zero_grad()
                 logits = model(x.float())
+                logits = torch.log_softmax(logits, dim=1)
                 loss = self.criterion(logits, y)
                 loss.backward()
                 optimizer.step()
@@ -91,14 +93,32 @@ class local_trainer(object):
         return model.state_dict(), result_dict
     
     
-    def update_weights_scaffold(self, model, c_global, c_local):
+    def update_weights_scaffold(self, model, c_global, c_local, current_epoch, label_list):
         step_outputs = []
-        optimizer = torch.optim.Adam(model.parameters(), lr=float(self.args.learning_rate), weight_decay=1e-04, betas=(0.9, 0.98), eps=1e-9)
-        global_model = copy.deepcopy(model)
         
         c_global_para = c_global.state_dict()
         c_local_para = c_local.state_dict()
         cnt = 0
+        lr = float(self.args.learning_rate) / np.power(2, (int(current_epoch/100)))
+        
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-04, betas=(0.9, 0.98), eps=1e-9)
+        global_model = copy.deepcopy(model)
+        
+        class_dict = collections.Counter(label_list)
+        minimum = min(class_dict, key=class_dict.get)
+        cls_num_list = []
+        for i in range(4):
+            if i in class_dict: cls_num_list.append(class_dict[i])
+            else: cls_num_list.append(class_dict[minimum])
+        
+        beta = 0.9999
+        effective_num = 1.0 - np.power(beta, cls_num_list)
+        per_cls_weights = (1.0 - beta) / np.array(effective_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+        per_cls_weights = torch.FloatTensor(per_cls_weights).to(self.device)
+        criterion = nn.NLLLoss(per_cls_weights).to(self.device)
+        # pdb.set_trace()
+        
         for iter in range(int(self.args.local_epochs)):
             
             model.to(self.device)
@@ -114,7 +134,8 @@ class local_trainer(object):
                 x, y = x.to(self.device), y.to(self.device)
                 
                 logits = model(x.float())
-                loss = self.criterion(logits, y)
+                logits = torch.log_softmax(logits, dim=1)
+                loss = criterion(logits, y)
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -124,7 +145,7 @@ class local_trainer(object):
                 # scaffold
                 model_para = model.cpu().state_dict().copy()
                 for key in model_para: 
-                    model_para[key] = model_para[key] - float(self.args.learning_rate) * (c_global_para[key] - c_local_para[key])
+                    model_para[key] = model_para[key] - lr * (c_global_para[key] - c_local_para[key])
                 model.load_state_dict(model_para)
                 
                 # obtain results
@@ -139,7 +160,7 @@ class local_trainer(object):
         local_model_para = model.cpu().state_dict()
         
         for key in local_model_para:
-            c_new_para[key] = c_new_para[key] - c_global_para[key] + (global_model_para[key] - local_model_para[key]) / (cnt * float(self.args.learning_rate))
+            c_new_para[key] = c_new_para[key] - c_global_para[key] + (global_model_para[key] - local_model_para[key]) / (cnt * lr)
             c_delta_para[key] = c_new_para[key] - c_local_para[key]
         c_local.load_state_dict(c_new_para)
         result_dict, _, _ = result_summary(step_outputs)

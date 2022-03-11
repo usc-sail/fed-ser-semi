@@ -15,7 +15,7 @@ from copy import deepcopy
 sys.path.append(os.path.join(str(Path(os.path.realpath(__file__)).parents[1]), 'model'))
 
 from dnn_models import dnn_classifier
-from update import average_weights, average_gradients, local_trainer, pred_summary
+from update import average_weights, local_trainer, pred_summary
                        
 # define feature len mapping
 feature_len_dict = {'emobase': 988, 'ComParE': 6373, 'wav2vec': 9216, 
@@ -155,7 +155,7 @@ if __name__ == '__main__':
         for epoch in range(int(args.num_epochs)):
             # we choose 20% of clients in training
             np.random.seed(epoch)
-            idxs_speakers = np.random.choice(range(num_of_speakers), int(0.1 * num_of_speakers), replace=False)
+            idxs_speakers = np.random.choice(range(num_of_speakers), int(0.2 * num_of_speakers), replace=False)
             
             # define list varibles that saves the weights, loss, num_sample, etc.
             local_updates, local_c_deltas, local_losses, local_num_sampels = [], [], [], []
@@ -170,8 +170,12 @@ if __name__ == '__main__':
                 trainer = local_trainer(args, device, criterion, args.model_type, train_dataloaders)
            
                 # read shared updates: parameters in fed_avg and gradients for fed_sgd
-                if args.model_type == 'scaffold':
-                    local_update, local_c_delta, train_result = trainer.update_weights_scaffold(model=copy.deepcopy(global_model), c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id])
+                if 'scaffold' in args.model_type:
+                    local_update, local_c_delta, train_result = trainer.update_weights_scaffold(model=copy.deepcopy(global_model), 
+                                                                                                c_global=copy.deepcopy(c_model),
+                                                                                                current_epoch=epoch, 
+                                                                                                label_list=train_labeled_speaker_dict[speaker_id]['label'],
+                                                                                                c_local=c_local_dict[speaker_id])
                     local_c_deltas.append(local_c_delta)
                 else:
                     local_update, train_result = trainer.update_weights(model=copy.deepcopy(global_model))
@@ -192,7 +196,7 @@ if __name__ == '__main__':
             global_model.load_state_dict(global_weights)
             
             # 2.3 scaffold
-            if args.model_type == 'scaffold':
+            if 'scaffold' in args.model_type:
                 c_delta_weights = average_weights(local_c_deltas, np.ones(len(local_c_deltas)))
                 c_global_para = c_model.state_dict()
                 for key in c_global_para: c_global_para[key] += c_delta_weights[key]
@@ -255,12 +259,12 @@ if __name__ == '__main__':
             result_dict[epoch]['test'] = test_result
             
             if epoch == 0: best_epoch, best_val_dict, best_test_dict = 0, validate_result, test_result
-            if validate_result['uar'] > best_val_dict['uar'] and epoch > 0:
+            if validate_result['uar'] > best_val_dict['uar'] and epoch > 300:
                 # Save best model and training history
                 best_epoch, best_val_dict, best_test_dict = epoch, validate_result, test_result
                 torch.save(deepcopy(global_model.state_dict()), str(model_result_path.joinpath(save_row_str, 'model.pt')))
             
-            if epoch > 0:
+            if epoch > 300:
                 # log results
                 print('------------------------------------------------------------------------------------------------------')
                 print('------------------------------------------------------------------------------------------------------')

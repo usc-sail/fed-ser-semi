@@ -1,3 +1,4 @@
+from ast import arg
 from moviepy.tools import verbose_print
 import torch
 import torch.nn as nn
@@ -5,6 +6,9 @@ import argparse, logging
 import torch.multiprocessing
 from torch.utils.data import DataLoader
 from pytorch_lightning import seed_everything
+from sklearn.metrics import accuracy_score, recall_score
+from sklearn.metrics import confusion_matrix
+import collections
 
 import numpy as np
 from pathlib import Path
@@ -93,6 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', default='fed_sgd')
     parser.add_argument('--pred', default='emotion')
     parser.add_argument('--u', default=0.1)
+    parser.add_argument('--temp', default=1.0)
     parser.add_argument('--logit_threshold', default=0.7)
     parser.add_argument('--client_label_rate', default=0.4)
     parser.add_argument('--save_dir', default='/media/data/projects/speech-privacy')
@@ -137,10 +142,12 @@ if __name__ == '__main__':
         # log saving path
         if args.model_type == 'fed_avg':
             model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'semi', args.dataset, args.feature_type, str(args.u).replace('.', ''), model_setting_str)
-        elif args.model_type == 'scaffold_without_consistency':
-            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_semi_without_consistency', args.dataset, args.feature_type, str(args.u).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
+        elif args.model_type == 'scaffold_crest':
+            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_crest', args.dataset, args.feature_type, str(args.u).replace('.', '')+'_temp_'+str(args.temp).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
+        elif args.model_type == 'scaffold_fixmatch':
+            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_fixmatch', args.dataset, args.feature_type, str(args.u).replace('.', '')+'_temp_'+str(args.temp).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
         else:
-            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_semi', args.dataset, args.feature_type, str(args.u).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
+            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_semi', args.dataset, args.feature_type, str(args.u).replace('.', '')+'_temp_'+str(args.temp).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
         Path.mkdir(model_result_path, parents=True, exist_ok=True)
         Path.mkdir(model_result_path.joinpath(save_row_str), parents=True, exist_ok=True)
 
@@ -154,10 +161,19 @@ if __name__ == '__main__':
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
     
+        pseudo_dict = {}
+        pseudo_dict['true'], pseudo_dict['pseudo'] = [], []
+        
+        pseudo_data_dict = {}
+        for idx in range(num_of_speakers):
+            speaker_id = speaker_list[idx]
+            pseudo_data_dict[speaker_id] = {}
+            pseudo_data_dict[speaker_id]['data'], pseudo_data_dict[speaker_id]['label'] = [], []
+            
         for epoch in range(int(args.num_epochs)):
             # we choose 20% of clients in training
             np.random.seed(epoch)
-            idxs_speakers = np.random.choice(range(num_of_speakers), int(0.1 * num_of_speakers), replace=False)
+            idxs_speakers = np.random.choice(range(num_of_speakers), int(0.2 * num_of_speakers), replace=False)
             
             # define list varibles that saves the weights, loss, num_sample, etc.
             local_updates, local_c_deltas, local_losses, local_num_sampels = [], [], [], []
@@ -177,14 +193,49 @@ if __name__ == '__main__':
                         history_model.load_state_dict(history_model_dict[speaker_id])
                         
                     local_update, local_c_delta, train_result, data_list = trainer.update_weights_scaffold_unsupervised(model=copy.deepcopy(global_model), 
-                                                                                                                        c_global=copy.deepcopy(c_model), 
-                                                                                                                        c_local=c_local_dict[speaker_id],
+                                                                                                                        c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id],
                                                                                                                         labeled_data_dict=train_labeled_speaker_dict[speaker_id].copy(),
                                                                                                                         unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id].copy(), 
+                                                                                                                        current_epoch=epoch, pseudo_dict=pseudo_dict, T=float(args.temp),
                                                                                                                         history_model=history_model, u=float(args.u), logit_threshold=float(args.logit_threshold))
                     train_labeled_speaker_dict[speaker_id] = data_list[0].copy()
                     train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
                     local_c_deltas.append(local_c_delta)
+                # elif args.model_type == 'update_weights_scaffold_fixmatch':
+                elif args.model_type == 'scaffold_fixmatch':
+                    history_model = None
+                    if history_model_dict[speaker_id]:
+                        history_model = dnn_classifier(pred='emotion', input_spec=feature_len_dict[args.feature_type], dropout=float(args.dropout))
+                        history_model = history_model.to(device)
+                        history_model.load_state_dict(history_model_dict[speaker_id])
+                        
+                    local_update, local_c_delta, train_result, data_list = trainer.update_weights_scaffold_fixmatch(model=copy.deepcopy(global_model), pseudo_data_dict=pseudo_data_dict[speaker_id],
+                                                                                                                    c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id],
+                                                                                                                    labeled_data_dict=train_labeled_speaker_dict[speaker_id].copy(),
+                                                                                                                    unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id].copy(),
+                                                                                                                    current_epoch=epoch, pseudo_dict=pseudo_dict, T=float(args.temp),
+                                                                                                                    history_model=history_model, u=float(args.u), logit_threshold=float(args.logit_threshold))
+                    train_labeled_speaker_dict[speaker_id] = data_list[0].copy()
+                    train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
+                    pseudo_data_dict[speaker_id] = data_list[2].copy()
+                    local_c_deltas.append(local_c_delta)
+                elif args.model_type == 'scaffold_crest':
+                    history_model = None
+                    if history_model_dict[speaker_id]:
+                        history_model = dnn_classifier(pred='emotion', input_spec=feature_len_dict[args.feature_type], dropout=float(args.dropout))
+                        history_model = history_model.to(device)
+                        history_model.load_state_dict(history_model_dict[speaker_id])
+                        
+                    local_update, local_c_delta, train_result, data_list = trainer.update_weights_scaffold_crest(model=copy.deepcopy(global_model), 
+                                                                                                                 c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id],
+                                                                                                                 labeled_data_dict=train_labeled_speaker_dict[speaker_id].copy(),
+                                                                                                                 unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id].copy(),
+                                                                                                                 current_epoch=epoch, pseudo_dict=pseudo_dict, T=float(args.temp),
+                                                                                                                 history_model=history_model, u=float(args.u), logit_threshold=float(args.logit_threshold))
+                    train_labeled_speaker_dict[speaker_id] = data_list[0].copy()
+                    train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
+                    local_c_deltas.append(local_c_delta)
+                
                 else:
                     local_update, train_result = trainer.update_weights(model=copy.deepcopy(global_model), unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id], current_epoch=epoch, u=float(args.u))
                 
@@ -207,7 +258,7 @@ if __name__ == '__main__':
             global_model.load_state_dict(global_weights)
             
             # 2.3 scaffold
-            if args.model_type == 'scaffold' or args.model_type == 'scaffold_without_consistency':
+            if 'scaffold' in args.model_type:
                 c_delta_weights = average_weights(local_c_deltas, np.ones(len(local_c_deltas)))
                 c_global_para = c_model.state_dict()
                 for key in c_global_para: c_global_para[key] += c_delta_weights[key]
@@ -270,13 +321,21 @@ if __name__ == '__main__':
             result_dict[epoch]['validate'] = validate_result
             result_dict[epoch]['test'] = test_result
             
+            if len(pseudo_dict['true']) != 0:
+                acc_score = accuracy_score(np.array(pseudo_dict['true']), np.array(pseudo_dict['pseudo']))
+                rec_score = recall_score(np.array(pseudo_dict['true']), np.array(pseudo_dict['pseudo']), average='macro')
+                print('pseudo label accurracy, number of labels %d, acc %.2f, rec %.2f' % (len(pseudo_dict['pseudo']), acc_score*100, rec_score*100))
+                class_dict = collections.Counter(np.array(pseudo_dict['pseudo']))
+                print(class_dict)
             if epoch == 0: best_epoch, best_val_dict, best_test_dict = 0, validate_result, test_result
-            if validate_result['uar'] > best_val_dict['uar'] and epoch > 0:
+            if validate_result['uar'] > best_val_dict['uar'] and epoch > 300:
                 # Save best model and training history
                 best_epoch, best_val_dict, best_test_dict = epoch, validate_result, test_result
+                best_test_dict['pseudo_num'] = len(pseudo_dict['true'])
+                best_test_dict['pseudo_acc'], best_test_dict['pseudo_rec'] = acc_score, rec_score
                 torch.save(deepcopy(global_model.state_dict()), str(model_result_path.joinpath(save_row_str, 'model.pt')))
             
-            if epoch > 0:
+            if epoch > 300:
                 # log results
                 print('-----------------------------------------------------------------------------------')
                 print('-----------------------------------------------------------------------------------')
@@ -287,6 +346,9 @@ if __name__ == '__main__':
         
         # Performance save code
         row_df = save_result(save_row_str, best_test_dict['acc'], best_test_dict['uar'], best_epoch, args.dataset)
+        row_df['pseudo_num'] = best_test_dict['pseudo_num']
+        row_df['pseudo_acc'] = best_test_dict['pseudo_acc']
+        row_df['pseudo_rec'] = best_test_dict['pseudo_rec']
         save_result_df = pd.concat([save_result_df, row_df])
         save_result_df.to_csv(str(model_result_path.joinpath('result.csv')))
         
