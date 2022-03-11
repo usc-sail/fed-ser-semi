@@ -142,8 +142,6 @@ if __name__ == '__main__':
         # log saving path
         if args.model_type == 'fed_avg':
             model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'semi', args.dataset, args.feature_type, str(args.u).replace('.', ''), model_setting_str)
-        elif args.model_type == 'scaffold_crest':
-            model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_crest', args.dataset, args.feature_type, str(args.u).replace('.', '')+'_temp_'+str(args.temp).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
         elif args.model_type == 'scaffold_fixmatch':
             model_result_path = Path(os.path.realpath(__file__)).parents[1].joinpath('results', 'scaffold_fixmatch', args.dataset, args.feature_type, str(args.u).replace('.', '')+'_temp_'+str(args.temp).replace('.', '') + '_thre_'+ str(args.logit_threshold).replace('.', ''), model_setting_str)
         else:
@@ -185,24 +183,7 @@ if __name__ == '__main__':
                 
                 # 1.1 Local training
                 trainer = local_trainer(args, device, criterion, args.model_type, None)
-                if args.model_type == 'scaffold':
-                    history_model = None
-                    if history_model_dict[speaker_id]:
-                        history_model = dnn_classifier(pred='emotion', input_spec=feature_len_dict[args.feature_type], dropout=float(args.dropout))
-                        history_model = history_model.to(device)
-                        history_model.load_state_dict(history_model_dict[speaker_id])
-                        
-                    local_update, local_c_delta, train_result, data_list = trainer.update_weights_scaffold_unsupervised(model=copy.deepcopy(global_model), 
-                                                                                                                        c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id],
-                                                                                                                        labeled_data_dict=train_labeled_speaker_dict[speaker_id].copy(),
-                                                                                                                        unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id].copy(), 
-                                                                                                                        current_epoch=epoch, pseudo_dict=pseudo_dict, T=float(args.temp),
-                                                                                                                        history_model=history_model, u=float(args.u), logit_threshold=float(args.logit_threshold))
-                    train_labeled_speaker_dict[speaker_id] = data_list[0].copy()
-                    train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
-                    local_c_deltas.append(local_c_delta)
-                # elif args.model_type == 'update_weights_scaffold_fixmatch':
-                elif args.model_type == 'scaffold_fixmatch':
+                if args.model_type == 'scaffold_fixmatch':
                     history_model = None
                     if history_model_dict[speaker_id]:
                         history_model = dnn_classifier(pred='emotion', input_spec=feature_len_dict[args.feature_type], dropout=float(args.dropout))
@@ -219,23 +200,6 @@ if __name__ == '__main__':
                     train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
                     pseudo_data_dict[speaker_id] = data_list[2].copy()
                     local_c_deltas.append(local_c_delta)
-                elif args.model_type == 'scaffold_crest':
-                    history_model = None
-                    if history_model_dict[speaker_id]:
-                        history_model = dnn_classifier(pred='emotion', input_spec=feature_len_dict[args.feature_type], dropout=float(args.dropout))
-                        history_model = history_model.to(device)
-                        history_model.load_state_dict(history_model_dict[speaker_id])
-                        
-                    local_update, local_c_delta, train_result, data_list = trainer.update_weights_scaffold_crest(model=copy.deepcopy(global_model), 
-                                                                                                                 c_global=copy.deepcopy(c_model), c_local=c_local_dict[speaker_id],
-                                                                                                                 labeled_data_dict=train_labeled_speaker_dict[speaker_id].copy(),
-                                                                                                                 unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id].copy(),
-                                                                                                                 current_epoch=epoch, pseudo_dict=pseudo_dict, T=float(args.temp),
-                                                                                                                 history_model=history_model, u=float(args.u), logit_threshold=float(args.logit_threshold))
-                    train_labeled_speaker_dict[speaker_id] = data_list[0].copy()
-                    train_unlabeled_speaker_dict[speaker_id] = data_list[1].copy()
-                    local_c_deltas.append(local_c_delta)
-                
                 else:
                     local_update, train_result = trainer.update_weights(model=copy.deepcopy(global_model), unlabeled_data_dict=train_unlabeled_speaker_dict[speaker_id], current_epoch=epoch, u=float(args.u))
                 
