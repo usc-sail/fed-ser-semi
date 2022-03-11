@@ -26,7 +26,7 @@ class DatasetGenerator():
         return torch.tensor(data), torch.tensor(int(label))
     
 
-class UnlabelDatasetGenerator():
+class PeudoDatasetGenerator():
     def __init__(self, dataset, mode='train'):
         self.dataset = dataset
         self.mode = mode
@@ -223,13 +223,13 @@ class local_trainer(object):
             
             # unlabeled training data loader
             if len(pseudo_data_dict['label']) > 0:
-                dataset_unlabeled = UnlabelDatasetGenerator(pseudo_data_dict)
-                unlabeled_dataloader = DataLoader(dataset_unlabeled, batch_size=16, num_workers=0, shuffle=False)
-                unlabeled_x_list, unlabel_y_list = [], []
-                for batch_idx, batch_data in enumerate(unlabeled_dataloader):
-                    unlabeled_x, unlabeled_y = batch_data
-                    unlabeled_x_list.append(unlabeled_x)
-                    unlabel_y_list.append(unlabeled_y)
+                dataset_peudo = PeudoDatasetGenerator(pseudo_data_dict)
+                peudo_dataloader = DataLoader(dataset_peudo, batch_size=16, num_workers=0, shuffle=False)
+                pseudo_x_list, pseudo_y_list = [], []
+                for batch_idx, batch_data in enumerate(peudo_dataloader):
+                    pseudo_x, pseudo_y = batch_data
+                    pseudo_x_list.append(pseudo_x)
+                    pseudo_y_list.append(pseudo_y)
         
             model.train()
             # first training
@@ -249,10 +249,10 @@ class local_trainer(object):
                 loss = criterion(logits, y)
                 
                 if len(pseudo_data_dict['label']) > 0:
-                    if batch_idx < len(unlabeled_dataloader):
-                        logits1 = model(unlabeled_x_list[batch_idx].to(self.device))
+                    if batch_idx < len(peudo_dataloader):
+                        logits1 = model(pseudo_x_list[batch_idx].to(self.device))
                         logits1 = torch.log_softmax(logits1, dim=1)
-                        loss += criterion(logits1, unlabel_y_list[batch_idx].to(self.device))*len(logits1)/16
+                        loss += criterion(logits1, pseudo_y_list[batch_idx].to(self.device))*len(logits1)/16
                         
                 loss.backward()
                 optimizer.step()
