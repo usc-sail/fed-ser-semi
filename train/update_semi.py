@@ -129,6 +129,8 @@ class local_trainer(object):
             model.to(self.device)
             model.eval()
             
+            # ----------------------------------------------
+            # ----------------- multiview ------------------
             if iter == 0 and history_model and len(unlabeled_data_dict['data']) != 0:
                 pseudo_label_arr = np.zeros([10, len(unlabeled_data_dict['data']), 4])
                 for aug_idx in range(10):
@@ -153,7 +155,6 @@ class local_trainer(object):
 
                 # ----------------------------------------------
                 # -------------------- ups ---------------------
-                #selecting negative pseudo-labels
                 if current_epoch >= 300:
                     tau_p = logit_threshold  
                 else:
@@ -172,21 +173,10 @@ class local_trainer(object):
                 
                 # ----------------------------------------------
                 class_dict = collections.Counter(labeled_data_dict['label'])
-                for i in range(4):
-                    if i not in class_dict: class_dict[i] = 0
-                        
-                key_list, freq_list = [], []
-                for key in class_dict:
-                    key_list.append(key)
-                    freq_list.append(class_dict[key])
                 
-                n0, freq_arg = np.max(freq_list), np.argsort(freq_list)
+                # control how many samples we trust per class per pseudo-labeling
                 sample_dict = {}
-                for idx, freq_idx in enumerate(freq_arg):
-                    ratio = freq_list[freq_idx] / n0
-                    key = key_list[freq_arg[::-1][idx]]
-                    # sample_dict[key] = int(np.power(ratio, 1/2) * len(unlabeled_data_dict['label']))
-                    sample_dict[key] = 1
+                for i in range(4): sample_dict[key] = 1
                     
                 print(sample_dict, class_dict)
                 if len(pseudo_target) > 0:
@@ -212,6 +202,7 @@ class local_trainer(object):
                         unlabeled_data_dict['data'] = np.delete(unlabeled_data_dict['data'], final_pseudo_list, axis=0)
                         unlabeled_data_dict['label'] = np.delete(unlabeled_data_dict['label'], final_pseudo_list)
             
+            # add local weights to the training samples based on the class distribution
             class_dict = collections.Counter(labeled_data_dict['label'])
             minimum = min(class_dict, key=class_dict.get)
             cls_num_list = []
@@ -280,6 +271,7 @@ class local_trainer(object):
                 label_dist = label_dist + truth_list
                 step_outputs.append({'loss': loss.item(), 'pred': pred_list, 'truth': truth_list})
         
+        # scaffold
         c_new_para = c_local.state_dict()
         c_delta_para = copy.deepcopy(c_local.state_dict())
         global_model_para = global_model.cpu().state_dict()
