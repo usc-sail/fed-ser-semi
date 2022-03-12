@@ -29,8 +29,8 @@ if __name__ == '__main__':
     
     # 2. process training data
     if config['mode'].getboolean('process_training') is True:
-        for dataset in ['msp-improv', 'iemocap', 'crema-d']:
-            for feature in ['emobase', 'apc', 'vq_apc', 'tera', 'decoar2', 'npc']:
+        for dataset in ['msp-improv', 'iemocap']:
+            for feature in ['emobase', 'apc', 'distilhubert', 'tera', 'decoar2']:
                 cmd_str = 'taskset 100 python3 preprocess_data/preprocess_federate_data.py --dataset ' + dataset
                 cmd_str += ' --feature_type ' + feature
                 cmd_str += ' --data_dir ' + config['dir'][dataset]
@@ -43,11 +43,13 @@ if __name__ == '__main__':
 
     # 3. Training SER model
     if config['mode'].getboolean('ser_training') is True:
-        for dataset in ['iemocap', 'crema-d', 'msp-improv']:
-            for feature in ['emobase', 'apc', 'tera', 'decoar2']:
-                for client_label_rate in [0.1, 0.25]:
-                    # cmd_str = 'taskset 1000 python3 train/federated_ser_classifier.py --dataset ' + dataset
-                    cmd_str = 'taskset 1000 python3 train/federated_semi_ser_classifier.py --logit_threshold 0.5 --u 0.1 --dataset ' + dataset
+        for dataset in ['iemocap', 'msp-improv']:
+            for feature in ['emobase', 'apc', 'tera', 'decoar2', 'distilhubert']:
+                for client_label_rate in [0.2, 0.4]:
+                    if config['model']['fed_model'] is not 'scaffold_fixmatch':
+                        cmd_str = 'taskset 1000 python3 train/federated_ser_classifier.py --dataset ' + dataset
+                    else:
+                        cmd_str = 'taskset 1000 python3 train/federated_semi_ser_classifier.py --logit_threshold 0.9 --temp 2.0 --u 1.0 --dataset ' + dataset
                     cmd_str += ' --feature_type ' + feature
                     cmd_str += ' --dropout ' + config['model']['dropout']
                     cmd_str += ' --norm znorm --optimizer adam --client_label_rate ' + str(client_label_rate)
