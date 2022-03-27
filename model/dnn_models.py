@@ -45,9 +45,7 @@ class dnn_classifier(nn.Module):
 
         x = self.dense2(x)
         x = self.dense_relu2(x)
-        x = nn.Dropout(p=0.2)(x)
+        x = self.dropout(x)
 
         preds = self.pred_layer(x)
-        preds = torch.log_softmax(preds, dim=1)
-        
         return preds
