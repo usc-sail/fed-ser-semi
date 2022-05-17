@@ -67,3 +67,5 @@ In order to further address the gradient drifting issue in non-IID setting of FL
   doi={10.21437/Interspeech.2021-1775}
 }
 ```
+
+**[Image credit: OpenMoji](https://openmoji.org/)**
