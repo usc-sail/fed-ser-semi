@@ -13,6 +13,7 @@ sys.path.append(os.path.join(os.path.abspath(os.path.curdir), '..', 'utils'))
 def pretrained_feature(audio):
     
     save_feature = []
+    model.eval()
     if args.feature_type == 'wav2vec':
         with torch.inference_mode(): 
             features, _ = model.extract_features(audio)
